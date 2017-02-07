@@ -1,0 +1,412 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+
+<html>
+
+
+<head>
+
+<body>
+
+
+<form action="chichewa_seg.php" method="get">
+
+<TEXTAREA cols=40 rows=10 name="lines"><?php
+print $_REQUEST['lines'];
+?></TEXTAREA>
+<INPUT type="submit" value="Parse"  >
+<p>
+
+</form>
+
+<?php
+
+/**
+* stems the given input
+*
+*
+*
+*/
+
+
+
+
+/**
+** VERBS
+**
+**/
+
+/**
+*
+* Prefixes
+*/
+
+//Negation
+$neg = array("si");
+
+
+//Subj Noun Classes and incorporated pronouns
+$subj_noun_classes = array("a","u","w","i","li","chi","zi","ka","ti","ku","pa", "mu", "ndi");
+
+
+//"li", "wa", "chi", "zi", "n", "pa". "ka". "ku", "i", "u", "ti", "me", "mi");
+
+//Imperative (one of two imperative strategies, the other with '-ni')
+$imp = array("ta");
+
+//subjunctive modifiers (meaning 'before' and 'would have' - can only appear with the subjunctive)
+$subj_mod = array("sana", "kana", "kada");
+
+//Tenses/Aspect position ("ku" is actually the infinitive and "ka" a conditional - but i think that they always occur in the tense/aspect position):
+$tense = array("ku","ma","pa", "dza", "a", "ba", "ka");
+
+//Negation (in embedded sentences)
+$neg_emb = array("sa");
+
+//Modal
+$modal = array("nga","zi","ba", "ta");
+ 
+//Conditional 
+$cond = array("ka");
+
+//Directive
+$directional = array("dza", "ka", "dzi");
+//NB: Modals and Directives can stack in any order and repeat
+
+$modal2 = array("ngo");
+
+
+//Obj Noun Classes and incorporated pronouns
+$obj_noun_classes = array("mu","wa","u","i","li","chi","zi","ka","ti");
+
+
+$verb_prefixes = array($neg, $subj_noun_classes, $imp, $subj_mod, $tense, $neg_emb, $modal, $cond, $directional, $modal2, $obj_noun_classes);
+
+$verb_pref_regex = "^".make_reg($verb_prefixes);
+
+
+
+
+/**
+* Suffixes
+*/
+
+
+//Note these can be (perhaps) be in any order (although with less frequency p67-71 & 119+) 
+// or the recip occurs both before and after the applicative (p108)
+$reciprocal = array("an");
+$causative = array("its", "ets");
+$applicative = array("il", "el", "i");
+$stative = array("ik", "ek");
+
+
+$passive = array("idw", "edw");
+
+$reversive = array("ul");
+
+//subjunctive
+$subj = array("e");
+
+//final-vowel (required by CV syllable structure - added when word would otherwsie be C-final.
+//note that this becomes "i" or "o" when nominalized for agentive and non-actor nouns respectively.
+$fv = array("a");
+
+
+//imperative plural (for second person - second part of a discontinuous unit)
+$imper_pl = array("ni");
+
+
+/**
+*
+* Clitics (post suffixes) p 71-72
+*/
+
+$clitic = array("be", "nso", "tu", "zi");
+
+$mods = array($reciprocal, $causative, $applicative, $stative);
+$mods3 = array($mods, $mods, $mods); #Hacky way to capture that mods can be in any order and in some cases repeated, by simply repeating them 3 times - they are not stacked > 3 times on our data
+
+$verb_suffixes = array($mods3, $passive, $reversive, $subj, $fv, $imper_pl, $clitic);
+
+$verb_suff_regex = make_reg($verb_suffixes)."$";
+
+
+/**
+** ADJECTIVES
+** CLASS + 'a' + CLASS + stem
+* 'yo' + verb-stem
+** (p24 of syntax)
+**/
+
+/*
+* Prefixes
+*/
+
+
+/**
+** NOUNS
+** CLASS + stem + clitic (clitics eg demonstratives "yo" p65)
+** CLASS + verb-stem + a->o|i
+** CLASS + verb-stem + 'idwe'|'edwe' ('manner of') p 115
+**/
+
+$noun_classes = array("mu","u","a","mi","li","ma","chi","zi","ka","ti","ku","pa");
+
+$demonstratives = array("iyo", "ichi", "awa", "yo", "chi", "wa");
+
+$noun_pref_regex =  "^".make_reg(array($noun_classes));
+$noun_suff_regex =  "^".make_reg(array($demonstratives));
+
+
+/**
+** COMPOUNDS (p117)
+** CLASS + VERB + unmodified-object-noun
+** CLASS + VERB + locative-noun
+**/
+
+
+
+/**
+** ASSOCIATIVE
+** (eg ya/wa 'of', in Noun+Assoc+Noun)
+**
+**/
+
+
+/**
+** POSSESSIVE  (eg athu 'our', anu 'your')
+** CLASS + stem
+**
+**/
+
+
+/**
+** DEMONSTRATIVE (eg those 'iyo', this 'ichi', awa 'these')
+**
+**
+**/
+
+/**
+** CONDITIONAL (eg ngati 'if')
+**
+**
+**/
+
+
+/**
+** RELATIVIZER ('mene'. 'omwe', 'emwe')
+** CLASS + stem
+**
+** (can be omitted, with tone obviating the potential deriviation of garden-path sentences)
+** (other strategy is to follow the final vowel on verb with CLASS+'o'
+**/
+
+
+/**
+** COPULA ('ndi')
+**
+**/
+
+/**
+** QUESTION ('kodi')
+**
+**/
+
+$row=0;
+
+/*
+$file = $argv[1];
+$handle = fopen($file, "r");
+while (($line = fgets($handle)) !== FALSE) {
+	$lines[] = $line;
+}
+*/
+$lines = preg_split('/\n/',$_REQUEST['lines']);
+if($_REQUEST['lines'] == ''){
+   $lines = array($argv[1]);
+}
+
+$test = "^".make_reg(array("z"));
+
+$regexes = array($verb_pref_regex, $verb_suff_regex, $noun_pref_regex, $noun_suff_regex); #each regex, to apply in turn
+
+foreach($lines as $line){
+    $line = preg_replace("/[\n\r]/", "", $line);
+    $line = preg_replace("/[\.\,]/", " ", $line);
+    //print "<br>\n$line\n";
+    
+    $words = preg_split("/ +/", $line);
+    
+    #$verb_pref_regex = preg_replace("/\?$/","",$verb_pref_regex);
+    
+    $last_morph = ""; //the last morpheme of the prev word
+    
+    foreach($words as $w){
+        $nomorph = $w; //the word, unmodified
+        
+        $w = strtolower($w);
+       // print "$w ";
+        
+        foreach($regexes as $regex){
+            
+            
+            if(substr($regex, 0, 1) == '^'){
+                
+                $vpmatches = array();
+                preg_match("/$regex/",$w,$vpmatches);
+                //print_r($vpmatches);
+                
+                $stem = preg_replace("/$regex/","",$w);
+                //print " ( $stem ) ";
+                $suff = $vpmatches[0]; //the full matched suffix
+                $suff_recon = "";
+                $suff_morph = "";
+                
+                for($i = count($vpmatches)-1; $i>=0; $i--){
+                #for($i = 0; $i< count($vpmatches)-1; $i++){
+                    $morph = $vpmatches[$i];
+                    if($morph == ''){
+                    	continue;
+                    }
+                    $word = $morph.$suff_recon;
+                    //print " Looking for $morph prefix in $suff \n";
+
+                    if(preg_match("/$word/",$suff) && $morph != ""){
+                        $suff_morph = $morph."-".$suff_morph;
+                        $suff_recon = $morph.$suff_recon;                        
+                        //print " (added $morph- bc $word was in $suff ) \n";
+                    }
+                    elseif($morph != ""){
+                        //print " (not adding $morph- bc $word was not in $suff ) \n";
+                    }
+                }
+
+                $w = $suff_morph.$stem;
+
+                
+            }
+            elseif(substr($regex, -1, 1) == '$'){
+                
+                $vpmatches = array();
+                preg_match("/$regex/",$w,$vpmatches);
+                #print_r($vpmatches);
+                
+                $stem = preg_replace("/$regex/","",$w);
+                #print " ( $stem ) ";
+                $suff = $vpmatches[0]; //the full matched suffix
+                $suff_recon = "";
+                $suff_morph = "";
+                
+                for($i = count($vpmatches)-1; $i>=0; $i--){
+                    $morph = $vpmatches[$i];
+                    if($morph == ""){
+                        continue;
+                    }
+                    $word = $morph.$suff_recon; //the candidate new morph + existing reconstructed suffix
+                    
+                    if(preg_match("/$word/",$suff) && $morph != ""){
+                        
+                        $suff_morph = "~".$morph.$suff_morph;
+                        $suff_recon = $morph.$suff_recon;
+                        //print " (added -$morph to $suff_morph bc $word was in $suff ) ";
+                        
+                    }
+                    elseif($morph != ""){
+                        #print " (not adding $morph to $suff_recon in $word / $suff ) ";
+                    }
+                }
+
+                $w = $stem.$suff_morph;
+                #pr_ar($vpmatches);
+            }
+            else{
+                exit("WARNING: EVERY REGEX MUST BE ANCHORED AT THE START OR END OF THE STRING");
+            }
+        }
+        
+        $w = preg_replace("/\-[\-\~]+/",'-',$w);
+        $w = preg_replace("/^\~+/",'~',$w);
+        $w = preg_replace("/^[\~\-]+/",'',$w);
+        $w = preg_replace("/[\~\-]+$/",'',$w);
+        
+        $word_with_morph = $w;
+        $word_stem = preg_replace("/\~.*$/",'',$w);
+        $word_stem = preg_replace("/^.*\-/",'',$word_stem);
+       
+        
+        $prefs = preg_split("/\-/",$word_with_morph);
+        //print_r($prefs);
+        $suffs = preg_split("/\~/",$word_with_morph);
+        #print_r($prefs);
+        
+        $word_spaces = preg_replace("/[\~\-]/",'',$word_with_morph);
+                
+        #print $nomorph." ";
+        //print $word_with_morph; 
+        
+        print "<em>";
+        for($i=0;$i<count($prefs)-1;$i++){
+            print $prefs[$i]."-";
+        }
+        print "</em><b>$word_stem</b><em>";
+        for($i=1;$i<count($suffs);$i++){
+            print "-".$suffs[$i];
+        }
+        print "</em>";
+        
+        //print $last_morph.$nomorph;
+
+        print " ";
+        
+
+    }
+    print "<br />\n";
+}
+//fclose($handle);
+
+
+
+function pr_ar($ar){
+    print "array(";
+    foreach($ar as $ae){
+        if($ae == ""){
+            continue;
+        }
+        print $ae.",";
+    }
+    print ")\n";
+}
+
+/**
+* turns the variable into a regex
+*/
+function make_reg($v, $sep=""){
+    $regex = "";
+    if(is_array($v)){
+        $res = array();
+        foreach($v as $vl){
+            $res[] = make_reg($vl,"|");
+        }
+        $regex = "(".join($res,$sep).")?";
+    }
+    else{
+        $regex = "($v)";
+    }
+    return $regex;
+}
+
+
+
+?>
+
+
+
+		</td>
+	</tr>
+</table>
+
+<br>&nbsp;
+</body>
+
+
+</html>
+
